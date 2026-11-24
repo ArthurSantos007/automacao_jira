@@ -54,4 +54,12 @@ jobs:
           PROTO="https"
           HOST="xray.cloud.getxray.app"
           BASE_URL="${PROTO}://${HOST}/api/v2"
-          curl -f -H "Content-Type: text/xml" -H "Authorization: Bearer ${{ steps.xray_auth.outputs.token }}" --data-binary @results/junit.xml "$BASE_URL/import/execution/junit?projectKey=QA"
+          RESPONSE=$(curl -s -w "\n%{http_code}" -H "Content-Type: text/xml" -H "Authorization: Bearer ${{ steps.xray_auth.outputs.token }}" --data-binary @results/junit.xml "$BASE_URL/import/execution/junit?projectKey=AQ")
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          echo "Resposta do Xray: $BODY"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Erro ao importar! Código HTTP: $HTTP_CODE"
+            exit 1
+          fi
