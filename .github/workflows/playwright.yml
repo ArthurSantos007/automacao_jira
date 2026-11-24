@@ -31,10 +31,21 @@ jobs:
         if: always()
         id: xray_auth
         run: |
-          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST --data "{\"client_id\": \"${{ secrets.XRAY_CLIENT_ID }}\",\"client_secret\": \"${{ secrets.XRAY_CLIENT_SECRET }}\"}" https://getxray.app | tr -d '"')
+          RESPONSE=$(curl -s -w "\n%{http_code}" -H "Content-Type: application/json" -X POST --data "{\"client_id\": \"${{ secrets.XRAY_CLIENT_ID }}\",\"client_secret\": \"${{ secrets.XRAY_CLIENT_SECRET }}\"}" https://getxray.app)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Erro na autenticação do Xray! Código HTTP: $HTTP_CODE"
+            echo "Resposta do servidor: $BODY"
+            exit 1
+          fi
+
+          TOKEN=$(echo "$BODY" | tr -d '"')
+          echo "::add-mask::$TOKEN"
           echo "token=$TOKEN" >> $GITHUB_OUTPUT
 
       - name: Enviar relatório JUnit para o Xray
-        if: always()
+        if: success()
         run: |
-          curl -H "Content-Type: text/xml" -H "Authorization: Bearer ${{ steps.xray_auth.outputs.token }}" --data-binary @results/junit.xml "https://getxray.app"
+          curl -f -H "Content-Type: text/xml" -H "Authorization: Bearer ${{ steps.xray_auth.outputs.token }}" --data-binary @results/junit.xml "https://getxray.app"
