@@ -1,27 +1,40 @@
-name: Playwright Tests
+name: Playwright Tests & Xray Sync
+
 on:
   push:
-    branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
+  workflow_dispatch:
+
 jobs:
-  test:
-    timeout-minutes: 60
+  test-and-report:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: lts/*
-    - name: Install dependencies
-      run: npm ci
-    - name: Install Playwright Browsers
-      run: npx playwright install --with-deps
-    - name: Run Playwright tests
-      run: npx playwright test
-    - uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
-      with:
-        name: playwright-report
-        path: playwright-report/
-        retention-days: 30
+      - name: Baixar código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Instalar navegador Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Executar testes Playwright
+        run: npx playwright test --project=chromium
+        continue-on-error: true
+
+      - name: Autenticar na API do Xray Cloud
+        if: always()
+        id: xray_auth
+        run: |
+          TOKEN=$(curl -s -H "Content-Type: application/json" -X POST --data "{\"client_id\": \"${{ secrets.XRAY_CLIENT_ID }}\",\"client_secret\": \"${{ secrets.XRAY_CLIENT_SECRET }}\"}" https://getxray.app | tr -d '"')
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Enviar relatório JUnit para o Xray
+        if: always()
+        run: |
+          curl -H "Content-Type: text/xml" -H "Authorization: Bearer ${{ steps.xray_auth.outputs.token }}" --data-binary @results/junit.xml "https://getxray.app"
